@@ -19,7 +19,7 @@ iucn$nbmailles<-iucn$"Nb mailles de 2x2 km"
 # x<-GET("https://www.inaturalist.org/users/api_token")
 # 24 h
 
-api_token<-"eyJhbGciOiJIUzUxMiJ9.eyJ1c2VyX2lkIjoyMTI5MjAxLCJleHAiOjE2NjMzMDgxNDF9.f64aoBPjCP03grM35rpl9MaEPtBfl38fJm8z6OdyLEOplPbt6JMKZjbihG9w9F64EL88sHIIvDXwGrtfdlqKCw"
+api_token<-"eyJhbGciOiJIUzUxMiJ9.eyJ1c2VyX2lkIjoyMTI5MjAxLCJleHAiOjE2NjYxOTIwNTJ9.dSmKmZMbNm6NUyALyxy1bTnZhlDn2-VOnkkKU5ZgDNzfHtZpLVEzkQ6aKksT_eBc1RunN6XhmkLHum5IF_1mQQ"
 
 #st_layers("C:/Users/God/Downloads/carto_maille22_uicn_all_V1.gpkg")
 occs<-st_read("C:/Users/God/Downloads/carto_maille22_uicn_all_V1.gpkg")
@@ -73,6 +73,7 @@ inatjson<-foreach(i=1:pages,.packages=c("jsonlite")) %do% {
     idobs=x$results$id,
     myid=myid,
     location=x$results$location,
+    date=x$results$observed_on,
     private_location=x$results$private_location,
     positional_accuracy=x$results$positional_accuracy,
     grade=x$results$quality_grade,
@@ -83,6 +84,7 @@ inatjson<-foreach(i=1:pages,.packages=c("jsonlite")) %do% {
   inat
 }  
 inat<-do.call("rbind",inatjson)
+inat<-inat[inat$date<="2022-09-15",] # remove what was not sent
 inat$location<-ifelse(!is.na(inat$private_location),inat$private_location,inat$location)
 inat$lon<-as.numeric(sapply(strsplit(inat$location,","),"[",2))
 inat$lat<-as.numeric(sapply(strsplit(inat$location,","),"[",1))
@@ -99,7 +101,7 @@ inat<-as.data.table(inat)
 ### get taxref names from checklistbank.org
 url<-"https://api.checklistbank.org/dataset/139831/nameusage/https%3A%2F%2Fwww.inaturalist.org%2Ftaxa%2F"
 species<-unique(inat$myid)
-species<-species[!species%in%c("Elatostema fagifolium","Strophocaulon unitum")]
+species<-species[!species%in%c("Elatostema fagifolium","Strophocaulon unitum","Lomariocycas tabularis")]
 l<-lapply(species,function(i){
   print(match(i,species))
   x<-fromJSON(paste0(url,inat$id[match(i,inat$myid)],"/related?datasetKey=2008"))
@@ -138,7 +140,8 @@ lookup<-list(c("Benthamia chlorantha","Benthamia latifolia"),
              c("Strophocaulon unitum","Sphaerostephanos unitus"), 
              c("Korthalsella gaudichaudii","Korthalsella gaudichaudii"),
              c("Microsorum scolopendria","Phymatosorus scolopendria"),
-             c("Trichomanes tamarisciforme","Abrodictyum tamarisciforme")
+             c("Trichomanes tamarisciforme","Abrodictyum tamarisciforme"),
+             c("Lomariocycas tabularis","Lomariocycas tabularis")
 )
 lookup<-as.data.frame(do.call("rbind",lookup))
 setnames(setDT(lookup),c("old","new"))
@@ -213,10 +216,50 @@ res$url<-obsurl
 res$empty<-""
 write.table(res[,c("species","listnewid","empty","url")][,-1],file="C:/Users/God/Documents/cbnm/iucn.txt",quote=FALSE,row.names=FALSE,sep="\t",col.names=FALSE)
 
+#identical(
+#  readLines("C:/Users/God/Documents/cbnm/iucn.txt"),
+#  readLines("C:/Users/God/Documents/cbnm/iucn2.txt")
+#)
+
+res$species[res$nbold==0 & res$nbnew>0]
+
+add<-res[res$listnew!="",]
+l<-lapply(1:nrow(add),function(i){
+  x<-add[i,]
+  m<-strsplit(x$listnew,", ")[[1]]  
+  data.frame(nom_sans_auteur=x$species,maille22=m)
+})
+add<-do.call("rbind",l)
+m<-match(add$nom_sans_auteur,iucn$sp)
+add$code_taxon<-iucn$code_taxon[m]
+add$nom_botanique<-iucn$"Nom scientifique (ITR)"[m]
+add$name<-paste(add$code_taxon,add$nom_sans_auteur,sep="_")
+add$layer<-add$name
+add$path<-res$url[m]
+add$geom<-mailles$geom[match(add$maille22,mailles$Nom_Maille2X2)]
+add$sp<-add$nom_sans_auteur
+
+#setdiff(names(add),names(occs))
+#setdiff(names(occs),names(add))
+
+st_geometry(add)<-"geom"
+add<-add[,names(occs)]
+
+add<-rbind(occs,add)
+add<-add[,!names(add)%in%c("sp")]
+
+
+#table(is.na(add$maille22))
+#table(is.na(add$path))
+#table(duplicated(add$code_taxon)==duplicated(add$nom_botanique))
+
+st_write(add,"C:/Users/God/Downloads/carto_maille22_uicn_all_V1_frousseu.gpkg",append=FALSE)
+add<-st_read("C:/Users/God/Downloads/carto_maille22_uicn_all_V1_frousseu.gpkg")
+
 
 plot(st_geometry(mailles))
+plot(st_geometry(add[substr(add$path,1,2)=="ht",]),col="grey70",add=TRUE)
 plot(st_geometry(st_as_sf(inat,crs=st_crs(mailles))),add=TRUE,col="red")
-
 
 
 inatsp<-st_as_sf(inat,crs=st_crs(mailles))
@@ -225,6 +268,16 @@ par(mar=c(0,0,0,0))
 plot(st_geometry(mailles))
 plot(st_geometry(occs[occs$nom_sans_auteur==sp,]),col=adjustcolor("darkgreen",0.5),add=TRUE)
 plot(st_geometry(inatsp[inatsp$myid==sp,]),col=adjustcolor("red",0.5),cex=2,pch=16,add=TRUE)
+
+
+### increment occs .gpkg
+
+
+
+
+
+
+
 
 
 
@@ -391,4 +444,13 @@ x<-fromJSON("https://api.checklistbank.org/dataset/139831/nameusage/https%3A%2F%
 
 
 x<-fromJSON(paste0(url,inat$id[match(sp,inat$sp)],"/related?datasetKey=2008"))
+
+
+
+library(sf)
+
+x<-st_read("C:/Users/God/Downloads/270_Angraecum multiflorum.gpkg")
+
+plot(st_geometry(mailles))
+plot(st_geometry(x),add=TRUE,col=adjustcolor("darkgreen",0.5))
 
