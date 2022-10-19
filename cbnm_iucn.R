@@ -227,25 +227,28 @@ add<-res[res$listnew!="",]
 l<-lapply(1:nrow(add),function(i){
   x<-add[i,]
   m<-strsplit(x$listnew,", ")[[1]]  
-  data.frame(nom_sans_auteur=x$species,maille22=m)
+  data.frame(sp=x$species,maille22=m)
 })
 add<-do.call("rbind",l)
-m<-match(add$nom_sans_auteur,iucn$sp)
+m<-match(add$sp,iucn$sp)
 add$code_taxon<-iucn$code_taxon[m]
 add$nom_botanique<-iucn$"Nom scientifique (ITR)"[m]
+add$nom_sans_auteur<-iucn$"Nom scientifique (sans auteur)"[m]
 add$name<-paste(add$code_taxon,add$nom_sans_auteur,sep="_")
 add$layer<-add$name
 add$path<-res$url[m]
 add$geom<-mailles$geom[match(add$maille22,mailles$Nom_Maille2X2)]
-add$sp<-add$nom_sans_auteur
+
 
 #setdiff(names(add),names(occs))
 #setdiff(names(occs),names(add))
 
-st_geometry(add)<-"geom"
-add<-add[,names(occs)]
+cells<-st_read("C:/Users/God/Downloads/carto_maille22_uicn_all_V1.gpkg")
 
-add<-rbind(occs,add)
+st_geometry(add)<-"geom"
+add<-add[,names(cells)]
+
+add<-rbind(cells,add)
 add<-add[,!names(add)%in%c("sp")]
 
 
@@ -263,7 +266,7 @@ plot(st_geometry(st_as_sf(inat,crs=st_crs(mailles))),add=TRUE,col="red")
 
 
 inatsp<-st_as_sf(inat,crs=st_crs(mailles))
-sp<-"Cissus quadrangularis"
+sp<-"Eragrostis tenella var. insularis"
 par(mar=c(0,0,0,0))
 plot(st_geometry(mailles))
 plot(st_geometry(occs[occs$nom_sans_auteur==sp,]),col=adjustcolor("darkgreen",0.5),add=TRUE)
@@ -453,4 +456,10 @@ x<-st_read("C:/Users/God/Downloads/270_Angraecum multiflorum.gpkg")
 
 plot(st_geometry(mailles))
 plot(st_geometry(x),add=TRUE,col=adjustcolor("darkgreen",0.5))
+
+
+#x<-occs[duplicated(occs[,c("code_taxon","maille22")]) | duplicated(occs[,c("code_taxon","maille22")],fromLast=TRUE),]
+#x<-x[order(x$code_taxon,x$maille22),]
+#x
+
 
